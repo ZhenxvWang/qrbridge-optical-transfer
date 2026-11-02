@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>zstd test</title></head>
+<body><pre id="out">running</pre>
+<script type="module">
+import { init, createCCtx, compressUsingDict, createDCtx, decompressUsingDict } from '../app/web/vendor/zstd/index.web.js';
+const out = document.getElementById('out');
+try {
+  await init();
+  const dict = new TextEncoder().encode(('QR Bridge 码桥 离线传输 CBOR LDPC SHA-256 file name size payload total chunk "name" "size" "sha256" ').repeat(40));
+  const text = JSON.stringify(Array.from({length: 800}, (_, i) => ({id: i, name: 'UOS 离线传输记录-' + i, value: 'QR Bridge 2.0 / 压缩 / 四路并行 / SHA-256'})));
+  const input = new TextEncoder().encode(text);
+  const cctx = createCCtx();
+  const compressed = compressUsingDict(cctx, input, dict, 3);
+  const dctx = createDCtx();
+  const restored = decompressUsingDict(dctx, compressed, dict, { defaultHeapSize: input.length });
+  let same = restored.length === input.length;
+  for (let i = 0; same && i < input.length; i++) if (restored[i] !== input[i]) same = false;
+  out.textContent = 'ZSTD_PASS input=' + input.length + ' compressed=' + compressed.length + ' dict=' + dict.length + ' same=' + same;
+  document.title = same ? 'ZSTD_PASS' : 'ZSTD_FAIL';
+} catch (e) {
+  out.textContent = 'ZSTD_FAIL ' + (e.stack || e);
+  document.title = 'ZSTD_FAIL';
+}
+</script></body></html>

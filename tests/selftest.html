@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>QR Bridge 2.0 Selftest</title>
+  <style>
+    body { font: 13px/1.6 monospace; padding: 20px; background: #f7fbfe; color: #102236; }
+    pre { white-space: pre-wrap; }
+    .pass { color: #087a6e; }
+    .fail { color: #b42318; font-weight: bold; }
+  </style>
+</head>
+<body>
+<pre id="out">running…</pre>
+<script src="../app/web/vendor/qrcode.js"></script>
+<script src="../app/web/vendor/jsQR.min.js"></script>
+<script src="../app/web/vendor/fflate.min.js"></script>
+<script src="../app/web/core.js"></script>
+<script>
+(function () {
+  'use strict';
+  var lines = [];
+  var failures = 0;
+  var passes = 0;
+
+  function assert(condition, message) {
+    if (condition) {
+      passes += 1;
+      lines.push('PASS  ' + message);
+    } else {
+      failures += 1;
+      lines.push('FAIL  ' + message);
+    }
+  }
+
+  function makeQR(text, version) {
+    var qr = qrcode(version || 0, 'L');
+    qr.addData(text, 'Alphanumeric');
+    qr.make();
+    return qr;
+  }
+
+  function drawBox(ctx, qr, x, y, width, height) {
+    var count = qr.getModuleCount();
+    var quiet = 4;
+    var scale = Math.max(1, Math.floor(Math.min(width, height) / (count + quiet * 2)));
+    var qrPixels = count * scale;
+    var ox = x + Math.floor((width - qrPixels) / 2);
+    var oy = y + Math.floor((height - qrPixels) / 2);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x, y, width, height);
+    ctx.fillStyle = '#071522';
+    for (var r = 0; r < count; r++) {
+      for (var c = 0; c < count; c++) {
+        if (qr.isDark(r, c)) ctx.fillRect(ox + c * scale, oy + r * scale, scale, scale);
+      }
+    }
+    return count;
+  }
+
+  function decodeCanvas(canvas) {
+    var ctx = canvas.getContext('2d');
+    var image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    return jsQR(image.data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
+  }
+
+  function testCore() {
+    var sizes = [1, 31, 220, 221, 440, 1000, 4096, 8192];
+    sizes.forEach(function (size) {
+      var data = new Uint8Array(size);
+      for (var i = 0; i < size; i++) data[i] = (i * 37 + 11) & 255;
+      var cs = 220;
+      var total = QRBCore.totalChunks(size, cs);
+      var chunks = QRBCore.buildChunks(data, cs);
+      var parsed = [];
+      for (var n = 0; n < total; n++) {
+        var text = QRBCore.makeDataFrame({
+          transferId: 'ABCD2345',
+          total: total,
+          chunkSize: cs,
+          index: n,
+          channels: 4,
+          payload: chunks[n]
+        });
+        assert(/^[0-9A-Z $%*+\-./:]+$/.test(text), 'data frame is alphanumeric ' + size + ' #' + n);
+        var frame = QRBCore.parseFrame(text);
+        assert(frame && frame.kind === 'data' && frame.index === n && frame.channels === 4, 'parse data ' + size + ' #' + n);
+        parsed.push(frame ? frame.payload : new Uint8Array(cs));
+      }
+      var assembled = QRBCore.assemble(parsed, size);
+      var equal = assembled.length === data.length;
+      for (var j = 0; equal && j < data.length; j++) {
+        if (assembled[j] !== data[j]) equal = false;
+      }
+      assert(equal, 'assemble round-trip ' + size + ' B');
+    });
+
+    var raw = new Uint8Array([0, 1, 2, 127, 128, 254, 255]);
+    assert(QRBCore.base32ToBytes(QRBCore.bytesToBase32(raw)).length === raw.length, 'base32 binary length');
+    var back = QRBCore.base32ToBytes(QRBCore.bytesToBase32(raw));
+    var same = true;
+    for (var i = 0; i < raw.length; i++) if (raw[i] !== back[i]) same = false;
+    assert(same, 'base32 binary round-trip');
+    assert(QRBCore.base32ToUtf8(QRBCore.utf8ToBase32('统信 UOS 文件.doc')) === '统信 UOS 文件.doc', 'base32 UTF-8 filename');
+    assert(QRBCore.safeFileName('../../etc/passwd') === '_.._etc_passwd', 'filename sanitisation');
+    assert(QRBCore.parseFrame('QFT2:D|BAD') === null, 'reject malformed frame');
+
+    var text = '压缩测试 码桥 QR Bridge\n'.repeat(2000);
+    var data = new TextEncoder().encode(text);
+    var prepared = QRBCore.preparePayload(data);
+    assert(prepared.flags === 1 && prepared.payload.length < data.length, 'gzip compresses text');
+    var restored = QRBCore.gunzipBytes(prepared.payload);
+    assert(restored.length === data.length && QRBCore.base32ToUtf8(QRBCore.bytesToBase32(restored)) === text, 'gzip round-trip');
+    assert(QRBCore.preparePayload(new Uint8Array([1, 2, 3, 4])).flags === 0, 'tiny payload stays raw');
+  }
+
+  function testProfiles() {
+    Object.keys(QRBCore.PROFILES).forEach(function (key) {
+      var profile = QRBCore.PROFILES[key];
+      var payload = new Uint8Array(profile.chunkSize);
+      var text = QRBCore.makeDataFrame({
+        transferId: 'ZZZZ9999',
+        total: 99999,
+        chunkSize: profile.chunkSize,
+        index: 99998,
+        channels: 4,
+        payload: payload
+      });
+      assert(/^[0-9A-Z $%*+\-./:]+$/.test(text), key + ' frame chars');
+      var qr;
+      try {
+        qr = makeQR(text, profile.qrVersion);
+        assert(qr.getModuleCount() === 17 + profile.qrVersion * 4, key + ' fixed version v' + profile.qrVersion);
+      } catch (error) {
+        assert(false, key + ' worst-case QR overflow: ' + error.message);
+        return;
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = 720;
+      canvas.height = 720;
+      drawBox(canvas.getContext('2d'), qr, 0, 0, 720, 720);
+      var code = decodeCanvas(canvas);
+      assert(code && code.data === text, key + ' 720px QR decode');
+
+      var grid = document.createElement('canvas');
+      grid.width = 1280;
+      grid.height = 720;
+      var gctx = grid.getContext('2d');
+      gctx.fillStyle = '#fff';
+      gctx.fillRect(0, 0, 1280, 720);
+      var qrs = [];
+      for (var i = 0; i < 4; i++) qrs.push(makeQR(text, profile.qrVersion));
+      var boxes = [[0, 0], [640, 0], [0, 360], [640, 360]];
+      for (i = 0; i < 4; i++) drawBox(gctx, qrs[i], boxes[i][0] + 144, boxes[i][1] + 4, 352, 352);
+      for (i = 0; i < 4; i++) {
+        var quad = document.createElement('canvas');
+        quad.width = 640;
+        quad.height = 360;
+        quad.getContext('2d').drawImage(grid, boxes[i][0], boxes[i][1], 640, 360, 0, 0, 640, 360);
+        var quadCode = decodeCanvas(quad);
+        assert(quadCode && quadCode.data === text, key + ' 4-grid quadrant ' + i + ' decode');
+      }
+      lines.push('INFO  ' + key + ' frame=' + text.length + ' chars, modules=' + (17 + profile.qrVersion * 4));
+    });
+  }
+
+  function testMeta() {
+    var meta = QRBCore.makeMetaFrame({
+      transferId: 'WXYZ6789',
+      total: 23,
+      chunkSize: 320,
+      fileName: '关于2026年第三季度统信UOS终端离线文件交换测试的报告（最终版）.docx',
+      fileSize: 7100,
+      payloadSize: 7100,
+      sha256: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      flags: 1,
+      channels: 4
+    });
+    assert(/^[0-9A-Z $%*+\-./:]+$/.test(meta), 'metadata is alphanumeric');
+    var parsed = QRBCore.parseFrame(meta);
+    assert(parsed && parsed.kind === 'meta' && parsed.compressed && parsed.channels === 4, 'metadata parse flags');
+    assert(parsed.fileName.indexOf('统信UOS') >= 0, 'metadata filename');
+    var qr;
+    try {
+      qr = makeQR(meta, 0);
+    } catch (error) {
+      assert(false, 'metadata QR generation: ' + error.message);
+      return;
+    }
+    var canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 1280, 720);
+    drawBox(ctx, qr, 290, 10, 700, 700);
+    var code = decodeCanvas(canvas);
+    assert(code && code.data === meta, 'metadata QR decode');
+    var parsed2 = QRBCore.parseFrame(code.data);
+    assert(parsed2 && parsed2.fileName.indexOf('统信UOS') >= 0, 'metadata QR parse');
+    lines.push('INFO  metadata modules=' + qr.getModuleCount() + ', chars=' + meta.length);
+  }
+
+  try {
+    testCore();
+    testProfiles();
+    testMeta();
+  } catch (error) {
+    failures += 1;
+    lines.push('FATAL ' + (error && error.stack ? error.stack : error));
+  }
+
+  var summary = (failures === 0 ? 'SELFTEST PASS' : 'SELFTEST FAIL') + ' passes=' + passes + ' failures=' + failures;
+  lines.unshift(summary);
+  var out = document.getElementById('out');
+  out.textContent = lines.join('\n');
+  out.className = failures === 0 ? 'pass' : 'fail';
+  document.title = failures === 0 ? 'SELFTEST_PASS' : 'SELFTEST_FAIL';
+  window.__selftest = { passes: passes, failures: failures, lines: lines };
+}());
+</script>
+</body>
+</html>

@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#0b1f33">
+  <meta name="description" content="码桥：不联网、不装依赖，用屏幕二维码和摄像头在两台电脑之间传输文件。">
+  <title>码桥 · 离线二维码文件传输</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-glow page-glow-a" aria-hidden="true"></div>
+  <div class="page-glow page-glow-b" aria-hidden="true"></div>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="码桥首页">
+        <img src="icon.svg" width="42" height="42" alt="">
+        <span class="brand-text">
+          <strong>码桥</strong>
+          <small>QR BRIDGE</small>
+        </span>
+      </a>
+      <div class="topbar-actions">
+        <span class="offline-badge" title="程序只在本机运行，不访问互联网">
+          <span class="dot"></span>
+          完全离线
+        </span>
+        <div class="mode-switch" aria-label="传输模式">
+          <a class="active" href="./">二维码</a>
+          <a href="fountain-send.html">Fountain 高速</a>
+        </div>
+        <button class="btn btn-quiet btn-small" id="helpBtn" type="button">使用说明</button>
+        <button class="btn btn-quiet btn-small" id="quitBtn" type="button">退出</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">SCREEN <span>→</span> CAMERA <span>→</span> FILE</p>
+          <h1>让文件穿过屏幕，<br><em>而不是网络。</em></h1>
+          <p class="hero-sub">一台电脑显示动态二维码，另一台用摄像头读取。无需 U 盘、无需局域网、无需安装任何运行库。</p>
+        </div>
+        <div class="hero-steps" aria-label="传输步骤">
+          <div class="hero-step">
+            <span class="step-number">01</span>
+            <span><strong>发送端</strong>选择文件并播放二维码</span>
+          </div>
+          <div class="hero-step">
+            <span class="step-number">02</span>
+            <span><strong>接收端</strong>打开摄像头对准屏幕</span>
+          </div>
+          <div class="hero-step">
+            <span class="step-number">03</span>
+            <span><strong>自动校验</strong>收齐后保存原文件</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="mode-switch" role="tablist" aria-label="选择模式">
+          <button class="mode-btn is-active" id="tabSend" type="button" role="tab" aria-selected="true" aria-controls="panelSend" data-mode="send">
+            <span class="mode-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0 4.5 4.5M12 4 7.5 8.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
+            </span>
+            <span><strong>发送文件</strong><small>此电脑显示二维码</small></span>
+          </button>
+          <button class="mode-btn" id="tabReceive" type="button" role="tab" aria-selected="false" aria-controls="panelReceive" data-mode="receive">
+            <span class="mode-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 4v12m0 0 4.5-4.5M12 16l-4.5-4.5M5 18v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1"/></svg>
+            </span>
+            <span><strong>接收文件</strong><small>用摄像头扫描二维码</small></span>
+          </button>
+        </div>
+
+        <section class="panel" id="panelSend" role="tabpanel" aria-labelledby="tabSend">
+          <div class="send-layout" id="sendLayout">
+            <div class="card setup-card">
+              <div class="card-heading">
+                <div>
+                  <p class="kicker">发送端</p>
+                  <h2>选择要传出的文件</h2>
+                </div>
+                <span class="limit-chip">最大 8 MB</span>
+              </div>
+
+              <label class="drop-zone" id="dropZone" for="fileInput" tabindex="0">
+                <input id="fileInput" type="file">
+                <span class="drop-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0 4.5 4.5M12 4 7.5 8.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
+                </span>
+                <strong>点击选择文件，或拖放到这里</strong>
+                <small>文件只在本机处理，不会上传到任何服务器</small>
+              </label>
+
+              <div class="file-card" id="fileCard" hidden>
+                <span class="file-type" id="fileType">FILE</span>
+                <span class="file-copy">
+                  <strong id="fileName">—</strong>
+                  <small id="fileMeta">—</small>
+                </span>
+                <button class="icon-btn" id="clearFileBtn" type="button" aria-label="移除文件" title="移除文件">
+                  <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+                </button>
+              </div>
+
+              <div class="settings-block">
+                <div class="setting-head">
+                  <span class="setting-label">传输档位</span>
+                  <span class="setting-help" id="profileHint">速度与可识别度的平衡，推荐先用这一档</span>
+                </div>
+                <div class="segmented" id="profileGroup" role="group" aria-label="传输档位">
+                  <button class="segment" type="button" data-profile="stable">稳定<small>220 B/帧</small></button>
+                  <button class="segment is-active" type="button" data-profile="balanced">均衡<small>440 B/帧</small></button>
+                  <button class="segment" type="button" data-profile="fast">快速<small>745 B/帧</small></button>
+                </div>
+
+                <div class="setting-head channel-head">
+                  <span class="setting-label">并行路数</span>
+                  <span class="setting-help" id="channelHint">4 路并行，建议全屏显示</span>
+                </div>
+                <div class="segmented segmented-2" id="channelGroup" role="group" aria-label="并行路数">
+                  <button class="segment" type="button" data-channels="1">单码<small>兼容优先</small></button>
+                  <button class="segment is-active" type="button" data-channels="4">4 路高速<small>屏幕四宫格</small></button>
+                </div>
+
+                <div class="setting-row">
+                  <label class="setting-label" for="fpsRange">播放帧率</label>
+                  <div class="range-wrap">
+                    <input id="fpsRange" type="range" min="3" max="10" step="1" value="5">
+                    <output id="fpsOutput" for="fpsRange">5 帧/秒</output>
+                  </div>
+                </div>
+              </div>
+
+              <button class="btn btn-primary btn-block" id="startSendBtn" type="button" disabled>
+                <span>开始播放二维码</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+              </button>
+              <p class="micro-tip">4 路模式会同时播放四宫格二维码，接收端对齐整个四宫格；开始后建议点击“全屏”。</p>
+            </div>
+
+            <div class="card qr-card" id="sendStage">
+              <div class="qr-empty" id="qrEmpty">
+                <div class="qr-illustration" aria-hidden="true">
+                  <span class="finder finder-tl"></span>
+                  <span class="finder finder-tr"></span>
+                  <span class="finder finder-bl"></span>
+                  <span class="qr-spark qr-spark-1"></span>
+                  <span class="qr-spark qr-spark-2"></span>
+                  <span class="qr-spark qr-spark-3"></span>
+                  <span class="screen-line"></span>
+                </div>
+                <h3>二维码将在这里播放</h3>
+                <p>选择文件后点击“开始播放”，把接收端摄像头对准这里即可。</p>
+                <div class="mini-specs">
+                  <span><b>220–745 B</b> 单码</span>
+                  <span><b>4 路并行</b> 20+ 片/秒</span>
+                  <span><b>gzip + SHA-256</b></span>
+                </div>
+              </div>
+
+              <div class="qr-live" id="qrLive" hidden>
+                <div class="qr-live-head">
+                  <div>
+                    <p class="kicker">正在广播</p>
+                    <strong id="qrFrameLabel">准备中…</strong>
+                  </div>
+                  <span class="live-pill" id="playState"><span class="dot"></span>播放中</span>
+                </div>
+                <div class="qr-frame-wrap" id="qrFrameWrap">
+                  <canvas id="qrCanvas" width="1280" height="720" aria-label="文件二维码"></canvas>
+                  <div class="pause-cover" id="pauseCover" hidden>
+                    <span>已暂停</span>
+                    <small>点击“继续播放”恢复</small>
+                  </div>
+                </div>
+                <div class="qr-progress">
+                  <div class="progress-track"><span id="sendProgressBar"></span></div>
+                  <div class="qr-progress-meta">
+                    <span id="sendProgressText">0 / 0 分片</span>
+                    <span id="cycleText">第 0 轮</span>
+                  </div>
+                </div>
+                <div class="qr-controls">
+                  <button class="btn btn-dark" id="pauseSendBtn" type="button">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>
+                    <span>暂停</span>
+                  </button>
+                  <button class="btn btn-ghost-light" id="fullscreenBtn" type="button">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5"/></svg>
+                    <span id="fullscreenLabel">全屏</span>
+                  </button>
+                  <button class="btn btn-ghost-light" id="manualSendBtn" type="button" title="只循环播放指定的缺失分片">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.7M20 5v6h-6"/></svg>
+                    <span id="manualSendLabel">补帧</span>
+                  </button>
+                  <button class="btn btn-ghost-light" id="stopSendBtn" type="button">停止</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="stats-strip" id="sendStats" hidden>
+            <div><span>原始 / 传输</span><strong id="statSize">—</strong></div>
+            <div><span>分片数量</span><strong id="statChunks">—</strong></div>
+            <div><span>二维码版本</span><strong id="statVersion">—</strong></div>
+            <div><span>完整一轮</span><strong id="statRound">—</strong></div>
+            <div class="stat-wide"><span>SHA-256</span><strong class="mono" id="statSha">—</strong></div>
+          </div>
+        </section>
+
+        <section class="panel" id="panelReceive" role="tabpanel" aria-labelledby="tabReceive" hidden>
+          <div class="receive-layout">
+            <div class="card camera-card" id="cameraCard">
+              <div class="card-heading">
+                <div>
+                  <p class="kicker">接收端</p>
+                  <h2>扫描发送端屏幕</h2>
+                </div>
+                <span class="status-chip" id="cameraStatus"><span class="dot"></span>摄像头未开启</span>
+              </div>
+
+              <div class="camera-stage" id="cameraStage">
+                <video id="cameraVideo" playsinline muted></video>
+                <canvas id="scanCanvas" hidden></canvas>
+                <canvas id="quadCanvas" hidden></canvas>
+                <div class="camera-placeholder" id="cameraPlaceholder">
+                  <span class="camera-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                  </span>
+                  <strong>等待开启摄像头</strong>
+                  <small>允许浏览器使用摄像头后，把二维码放入取景框</small>
+                </div>
+                <div class="scan-guide" id="scanGuide" hidden>
+                  <span class="corner c1"></span><span class="corner c2"></span>
+                  <span class="corner c3"></span><span class="corner c4"></span>
+                  <span class="scan-grid-v"></span><span class="scan-grid-h"></span>
+                  <span class="scan-beam"></span>
+                </div>
+                <div class="camera-flash" id="cameraFlash"></div>
+                <div class="camera-overlay-actions" id="cameraOverlayActions">
+                  <button class="btn btn-primary" id="startCameraBtn" type="button">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                    开启摄像头扫描
+                  </button>
+                  <button class="btn btn-ghost-light" id="stopCameraBtn" type="button" hidden>停止</button>
+                </div>
+              </div>
+
+              <div class="camera-toolbar">
+                <div class="select-wrap">
+                  <select id="cameraSelect" aria-label="选择摄像头" disabled>
+                    <option value="">默认摄像头</option>
+                  </select>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg>
+                </div>
+                <label class="btn btn-outline btn-small file-button" for="imageInput">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 15l4.5-4.5 4 4 2.5-2.5L20 17"/><circle cx="9" cy="9" r="1.2"/></svg>
+                  从图片识别
+                </label>
+                <input id="imageInput" type="file" accept="image/*" multiple hidden>
+              </div>
+              <p class="micro-tip">把发送端的整个四宫格放入取景框；也可以把二维码截图或照片拖进来，或直接粘贴图片。</p>
+            </div>
+
+            <div class="card receive-card">
+              <div class="receive-empty" id="receiveEmpty">
+                <div class="receive-empty-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 3v10m0 0 3.5-3.5M12 13 8.5 9.5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>
+                </div>
+                <h3>还没有识别到文件</h3>
+                <p>扫描到第一帧后，这里会显示文件名、实时进度和缺失分片。</p>
+                <div class="receive-tips">
+                  <span>四宫格整体入镜</span>
+                  <span>距离 20–60 cm</span>
+                  <span>避免屏幕反光</span>
+                </div>
+              </div>
+
+              <div class="receive-live" id="receiveLive" hidden>
+                <div class="receive-file-head">
+                  <span class="file-type" id="recvFileType">FILE</span>
+                  <span class="receive-file-copy">
+                    <strong id="recvFileName">等待文件信息…</strong>
+                    <small id="recvFileMeta">—</small>
+                  </span>
+                  <span class="percent-badge" id="recvPercent">0%</span>
+                </div>
+
+                <div class="big-progress">
+                  <div class="big-progress-track"><span id="recvProgressBar"></span></div>
+                  <div class="progress-caption">
+                    <span id="recvProgressText">0 / 0 分片</span>
+                    <span id="recvStatusText">等待二维码…</span>
+                  </div>
+                </div>
+
+                <div class="chunk-panel">
+                  <div class="chunk-head">
+                    <span>分片矩阵</span>
+                    <span class="chunk-legend"><i></i>已收到 <i class="missing"></i>待接收</span>
+                  </div>
+                  <canvas id="chunkCanvas" width="560" height="180" aria-label="分片接收矩阵"></canvas>
+                </div>
+
+                <div class="receive-stats">
+                  <div><span>已收字节</span><strong id="recvBytes">0 B</strong></div>
+                  <div><span>识别速度</span><strong id="recvRate">0 帧/秒</strong></div>
+                  <div><span>重复帧</span><strong id="recvDup">0</strong></div>
+                  <div><span>用时</span><strong id="recvElapsed">00:00</strong></div>
+                </div>
+
+                <div class="receive-actions">
+                  <button class="btn btn-outline btn-small" id="resetReceiveBtn" type="button">重新接收</button>
+                  <button class="btn btn-quiet btn-small" id="copyMissingBtn" type="button">复制缺失分片</button>
+                </div>
+              </div>
+
+              <div class="complete-card" id="completeCard" hidden>
+                <span class="complete-icon" id="completeIcon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"/></svg>
+                </span>
+                <p class="kicker" id="completeKicker">传输完成</p>
+                <h3 id="completeTitle">文件已完整接收</h3>
+                <p id="completeText">SHA-256 校验通过，可以保存到本机。</p>
+                <div class="complete-file">
+                  <span class="file-type" id="completeFileType">FILE</span>
+                  <span><strong id="completeFileName">—</strong><small id="completeFileMeta">—</small></span>
+                </div>
+                <button class="btn btn-primary btn-block" id="saveFileBtn" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12m0 0 4.5-4.5M12 16l-4.5-4.5M5 19h14"/></svg>
+                  <span id="saveFileLabel">保存文件</span>
+                </button>
+                <button class="btn btn-quiet btn-small" id="receiveAnotherBtn" type="button">继续接收下一个文件</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>码桥 QR Bridge <b id="versionText">v2.1.0</b></span>
+      <span>数据不离开本机 · 不使用网络 · 无第三方运行库</span>
+    </footer>
+  </div>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
+
+  <dialog class="help-dialog" id="helpDialog">
+    <div class="dialog-head">
+      <div>
+        <p class="kicker">使用说明</p>
+        <h2>两台电脑，一条视觉链路</h2>
+      </div>
+      <button class="icon-btn" id="closeHelpBtn" type="button" aria-label="关闭">
+        <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <div class="help-grid">
+        <section>
+          <h3>从统信 UOS 传到 Windows</h3>
+          <ol>
+            <li>在 UOS 上打开码桥，选择“发送文件”，选中文件并开始播放。</li>
+            <li>在 Windows 上打开码桥，选择“接收文件”，点击“开启摄像头扫描”。</li>
+            <li>把 Windows 摄像头对准 UOS 屏幕上的四宫格二维码，保持 20–60 cm。</li>
+            <li>进度到 100% 且校验通过后，点击“保存文件”。</li>
+          </ol>
+        </section>
+        <section>
+          <h3>从 Windows 传到统信 UOS</h3>
+          <ol>
+            <li>在 Windows 上选择文件并播放二维码。</li>
+            <li>在 UOS 上开启摄像头扫描。</li>
+            <li>若 UOS 主机没有摄像头，可改用带摄像头的 Windows 笔记本作为接收端，方向反过来即可。</li>
+          </ol>
+        </section>
+      </div>
+      <section>
+        <h3>提高识别率</h3>
+        <ul class="help-list">
+          <li>把发送端屏幕亮度调到最高，关闭夜间模式、护眼模式和自动亮度。</li>
+          <li>使用“全屏”显示四宫格，避免反光和摩尔纹；镜头与屏幕尽量垂直。</li>
+          <li>先试“均衡 + 4 路 + 5 帧/秒”。识别慢就降到“稳定”或“单码”。</li>
+          <li>摄像头请选 720p 或更高；关闭会议软件、相机应用等占用摄像头的程序。</li>
+          <li>接收端不要离屏幕太近，太近会无法对焦；也不要太远导致二维码太小。</li>
+        </ul>
+      </section>
+      <section>
+        <h3>常见问题</h3>
+        <dl class="faq">
+          <dt>浏览器没有弹出摄像头授权？</dt>
+          <dd>点击地址栏左侧的权限图标，把摄像头改为“允许”，然后刷新页面。统信 UOS 还需在“控制中心 → 隐私 → 摄像头”中确认浏览器有权限。</dd>
+          <dt>提示“当前浏览器不支持摄像头”？</dt>
+          <dd>请使用系统自带浏览器或 Chromium 80 以上版本打开本页面。不要使用 IE 或很旧的浏览器内核。</dd>
+          <dt>一直卡在 99%？</dt>
+          <dd>发送端会循环播放所有分片，通常再等一轮即可补齐。也可以点击“复制缺失分片”查看缺哪些帧；若长期缺失，降低档位或帧率后重新发送。</dd>
+          <dt>文件太大？</dt>
+          <dd>二维码是低速视觉通道，建议单文件不超过 1 MB。程序会先用 gzip 压缩；文本/JSON/日志通常能明显变小，docx/zip/图片本身已压缩则效果有限。上限为 8 MB。</dd>
+          <dt>UOS 提示 deb 没有有效数字签名？</dt>
+          <dd>统信安装器要求统信开发者证书签名，第三方无法生成合法签名。请改用便携包里的 <code>install-user.sh</code> 用户级安装，不需要 root 和开发者模式；详见发布包中的 <code>SIGNING.md</code>。</dd>
+          <dt>程序没有自动打开浏览器？</dt>
+          <dd>在 UOS 终端运行 <code>qrbridge</code> 查看地址；日志在 <code>~/.cache/qrbridge/qrbridge.log</code>。Windows 日志在 <code>%LOCALAPPDATA%\\QRBridge\\qrbridge.log</code>。</dd>
+        </dl>
+      </section>
+      <section class="privacy-note">
+        <h3>隐私与安全</h3>
+        <p>码桥只监听本机回环地址 <code>127.0.0.1</code>，所有页面资源都打包在程序内，不会发起外部网络请求。文件分片只在浏览器内存中处理，接收完成后用 SHA-256 校验完整性。二维码在物理空间可见，请勿在公共场所传输敏感文件。</p>
+      </section>
+    </div>
+    <div class="dialog-foot">
+      <button class="btn btn-primary" id="helpOkBtn" type="button">知道了</button>
+    </div>
+  </dialog>
+
+  <script src="vendor/qrcode.js" defer></script>
+  <script src="vendor/jsQR.min.js" defer></script>
+  <script src="vendor/fflate.min.js" defer></script>
+  <script src="core.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>

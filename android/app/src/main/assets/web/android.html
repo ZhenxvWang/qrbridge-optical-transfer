@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>码桥接收端 2.0.12</title>
+  <style>
+    :root { --bg:#07111c; --panel:#0e1e2e; --line:#22384d; --text:#eaf4ff; --muted:#8fa8bf; --brand:#35b6ff; --teal:#2dd4bf; --danger:#ff8073; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body { margin:0; min-height:100%; background:var(--bg); color:var(--text); font-family:"Noto Sans CJK SC","Microsoft YaHei",sans-serif; }
+    body { padding: env(safe-area-inset-top) 14px calc(18px + env(safe-area-inset-bottom)); }
+    header { position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:10px; min-height:62px; padding:10px 2px; border-bottom:1px solid var(--line); margin-bottom:12px; background:rgba(7,17,28,.96); backdrop-filter:blur(12px); }
+    .brand { display:flex; align-items:center; gap:9px; min-width:0; }
+    .logo { width:36px; height:36px; border-radius:9px; display:block; flex:none; }
+    h1 { margin:0; font-size:16px; letter-spacing:.01em; white-space:nowrap; }
+    header small { display:block; color:var(--muted); font-size:9px; letter-spacing:.1em; white-space:nowrap; }
+    .mode-tabs { display:flex; gap:3px; margin-left:auto; padding:3px; border:1px solid var(--line); border-radius:999px; background:#081624; flex:none; }
+    .mode { min-height:0; padding:6px 9px; border:0; border-radius:999px; background:transparent; color:var(--muted); font-size:10px; font-weight:700; line-height:1.2; white-space:nowrap; }
+    .mode[href] { display:inline-flex; align-items:center; justify-content:center; text-decoration:none; }
+    .mode.active { background:linear-gradient(135deg,#0b63ce,#0f9f8f); color:#fff; }
+    .mode-hint { margin:0 2px 9px; color:var(--muted); font-size:10px; text-align:center; }
+    .camera { position:relative; width:100%; aspect-ratio:4/3; background:#000; border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+    video { width:100%; height:100%; object-fit:cover; display:block; opacity:0; transition:opacity .2s ease; }
+    video.live { opacity:1; }
+    .empty { position:absolute; inset:0; display:grid; place-items:center; color:var(--muted); font-size:13px; text-align:center; padding:20px; }
+    .empty.hidden { display:none; }
+    .panel { margin-top:12px; border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:12px; }
+    .row { display:flex; gap:8px; }
+    .row > * { flex:1; min-width:0; }
+    button { min-height:44px; border:0; border-radius:11px; color:#fff; background:#17314a; font-size:14px; font-weight:600; padding:0 12px; }
+    button.primary { background:linear-gradient(135deg,#0b63ce,#0f9f8f); }
+    button:disabled { opacity:.45; }
+    input { width:100%; min-height:44px; border:1px solid var(--line); border-radius:11px; background:#081624; color:var(--text); padding:0 11px; font-size:14px; }
+    .progress-head { display:flex; justify-content:space-between; gap:10px; color:var(--muted); font-size:12px; }
+    .progress-head span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .bar { height:9px; border-radius:999px; background:#071521; overflow:hidden; margin-top:8px; }
+    .bar > i { display:block; width:0; height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--brand),var(--teal)); transition:width .2s; }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin-top:10px; }
+    .stat { background:#081624; border:1px solid var(--line); border-radius:9px; padding:7px 8px; min-width:0; }
+    .stat span { display:block; color:var(--muted); font-size:9px; }
+    .stat strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:600 11px/1.4 monospace; }
+    #log { min-height:38px; margin:10px 2px 0; color:var(--muted); font-size:11px; line-height:1.55; }
+    #log.error { color:var(--danger); }
+    #log.ok { color:#7ef0dc; }
+    .note { margin:12px 2px 0; color:#6e879d; font-size:10px; line-height:1.6; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><img class="logo" src="icon.svg" width="36" height="36" alt=""><div><h1>码桥接收端</h1><small>QR BRIDGE · 接收</small></div></div>
+    <div class="mode-tabs">
+      <button class="mode active" id="modeQr" type="button">标准二维码</button>
+      <button class="mode" id="modeCim" type="button" style="display:none">高速色码</button>
+      <a class="mode" id="modeFountain" href="fountain-receive.html">Fountain 高速</a>
+    </div>
+  </header>
+  <span class="pill" id="platform" style="display:none"></span>
+  <p class="mode-hint" id="modeHint">对应发送端的“二维码模式”；4 路二维码会自动分区识别。</p>
+
+  <div class="camera">
+    <video id="video" playsinline muted autoplay></video>
+    <div class="empty" id="empty">点下方按钮打开摄像头<br>对准发送端的码</div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <button class="primary" id="cameraBtn">打开摄像头</button>
+      <button id="resetBtn">清空</button>
+    </div>
+    <div style="height:8px"></div>
+    <input id="password" type="password" autocomplete="current-password" placeholder="解密口令（仅加密文件需要）">
+  </div>
+
+  <div class="panel">
+    <div class="progress-head"><span id="name">等待发送端</span><strong id="percent">0%</strong></div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="stats">
+      <div class="stat"><span>已收帧</span><strong id="have">0</strong></div>
+      <div class="stat"><span>总帧数</span><strong id="total">—</strong></div>
+      <div class="stat"><span>文件大小</span><strong id="size">—</strong></div>
+    </div>
+    <p id="log">先打开摄像头，再让发送端播放色码。</p>
+  </div>
+
+  <p class="note">只接收、不发送。标准二维码兼容 4 路/单路发送端（最大 8 MB）；高速色码支持大文件。文件在本机重组，SHA-256 校验通过后保存到系统“下载”目录。</p>
+
+  <script src="vendor/fflate.min.js"></script>
+  <script src="core.js"></script>
+  <script src="vendor/jsQR.min.js"></script>
+  <script src="cim.js"></script>
+  <script src="android.js"></script>
+</body>
+</html>

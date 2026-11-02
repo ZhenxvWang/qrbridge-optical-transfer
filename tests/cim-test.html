@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>QuantumGrid Selftest</title>
+<style>body{font:13px/1.6 monospace;background:#f7fbfe;color:#123;padding:20px}pre{white-space:pre-wrap}.ok{color:#087a6e}.bad{color:#b42318;font-weight:bold}</style></head>
+<body>
+<pre id="out">running...</pre>
+<canvas id="view" width="1280" height="720"></canvas>
+<script src="../app/web/cim.js"></script>
+<script>
+(function(){
+  'use strict';
+  var lines=[], pass=0, fail=0;
+  function assert(c,m){ if(c){pass++;lines.push('PASS  '+m);}else{fail++;lines.push('FAIL  '+m);} }
+  try {
+    var body=new Uint8Array(2400);
+    for(var i=0;i<body.length;i++) body[i]=(i*37+11)&255;
+    var msg=CIM.buildMessage(2,0x12345678,100,7,body,0);
+    assert(!!CIM.parseMessage(msg),'message crc parse');
+
+    var grid=document.createElement('canvas');
+    CIM.render(grid,msg);
+    assert(grid.width===1024 && grid.height===1024,'render size');
+
+    var view=document.getElementById('view');
+    var ctx=view.getContext('2d');
+    ctx.fillStyle='#f4f4f4';ctx.fillRect(0,0,1280,720);
+    ctx.drawImage(grid,280,0,720,720);
+    var image=ctx.getImageData(0,0,1280,720);
+    var sampled=CIM.decodeLevels(image,1280,720);
+    if(sampled.levels){
+      var expected=CIM.encodeLevels(msg);
+      var levelDiff=0;
+      for(var d=0;d<expected.length;d++) if(expected[d]!==sampled.levels[d]) levelDiff++;
+      lines.push('INFO levelDiff='+levelDiff+' / '+expected.length+' centers='+JSON.stringify(sampled.centers));
+    }
+    console.time('decode');
+    var decoded=CIM.decodeFrame(image,1280,720);
+    console.timeEnd('decode');
+    assert(decoded && !decoded.error,'decode no perspective: '+(decoded&&decoded.error||'ok'));
+    if(decoded && decoded.anchors) lines.push('INFO anchors='+JSON.stringify(decoded.anchors));
+    if(decoded && !decoded.error){
+      assert(decoded.transferId===0x12345678,'transfer id');
+      assert(decoded.index===7,'frame index');
+      assert(decoded.total===100,'total frames');
+      var same=decoded.body.length===body.length;
+      for(var j=0;same&&j<body.length;j++) if(decoded.body[j]!==body[j]) same=false;
+      assert(same,'body bytes');
+      lines.push('INFO centers='+JSON.stringify(decoded.centers));
+    }
+
+    // 测试 20% 单元擦除：把源网格中随机 20% 单元涂成中间灰。
+    var gctx=grid.getContext('2d');
+    var G=CIM.GRID;
+    var seed=12345, erased=0, target=Math.floor((G*G-G)*0.2), used=new Uint8Array(G*G);
+    while(erased<target){
+      seed^=seed<<13;seed>>>=0;seed^=seed>>>17;seed^=seed<<5;seed>>>=0;
+      var idx=seed%(G*G);
+      if(idx<G || used[idx]) continue;
+      used[idx]=1; erased++;
+      var x=CIM.ORIGIN+(idx%G)*CIM.CELL, y=CIM.ORIGIN+Math.floor(idx/G)*CIM.CELL;
+      gctx.fillStyle='rgb(127,127,127)';gctx.fillRect(x,y,CIM.CELL,CIM.CELL);
+    }
+    ctx.fillStyle='#f4f4f4';ctx.fillRect(0,0,1280,720);
+    ctx.drawImage(grid,280,0,720,720);
+    image=ctx.getImageData(0,0,1280,720);
+    var erasedDecoded=CIM.decodeFrame(image,1280,720);
+    assert(erasedDecoded && !erasedDecoded.error,'decode with 20% cell erasures: '+(erasedDecoded&&erasedDecoded.error||'ok'));
+    if(erasedDecoded && erasedDecoded.erasedCells) lines.push('INFO erasedCells='+erasedDecoded.erasedCells);
+
+    // 真正的透视变换：把源图中的 720x720 网格映射到不规则四边形。
+    var warped=document.createElement('canvas');warped.width=1280;warped.height=720;
+    var wctx=warped.getContext('2d');
+    var src=document.createElement('canvas');src.width=1280;src.height=720;src.getContext('2d').putImageData(image,0,0);
+    var srcData=src.getContext('2d').getImageData(0,0,1280,720).data;
+    var srcQuad=[[280,0],[1000,0],[280,720],[1000,720]];
+    var dstQuad=[[275,8],[1005,24],[315,712],[965,696]];
+    var Hf=CIM.homography(srcQuad,dstQuad);
+    var Hi=CIM.invert3(Hf);
+    var out=wctx.createImageData(1280,720);
+    for(var wy=0;wy<720;wy++){
+      for(var wx=0;wx<1280;wx++){
+        var sp=CIM.applyH(Hi,wx,wy);
+        var sx0=Math.round(sp[0]),sy0=Math.round(sp[1]);
+        var oi=(wy*1280+wx)*4;
+        if(sx0>=280&&sx0<1000&&sy0>=0&&sy0<720){
+          var si=(sy0*1280+sx0)*4;
+          out.data[oi]=srcData[si];out.data[oi+1]=srcData[si+1];out.data[oi+2]=srcData[si+2];out.data[oi+3]=255;
+        } else { out.data[oi]=244;out.data[oi+1]=244;out.data[oi+2]=244;out.data[oi+3]=255; }
+      }
+    }
+    wctx.putImageData(out,0,0);
+    var warpedImage=wctx.getImageData(0,0,1280,720);
+    var warpedDecoded=CIM.decodeFrame(warpedImage,1280,720);
+    assert(warpedDecoded && !warpedDecoded.error,'decode mild trapezoid: '+(warpedDecoded&&warpedDecoded.error||'ok'));
+    if(warpedDecoded && warpedDecoded.anchors) lines.push('INFO warpAnchors='+JSON.stringify(warpedDecoded.anchors));
+    if(warpedDecoded && warpedDecoded.erasedCells) lines.push('INFO warpErased='+warpedDecoded.erasedCells);
+  } catch(e) {
+    fail++; lines.push('FATAL '+(e.stack||e));
+  }
+  var summary=(fail===0?'QG_SELFTEST_PASS':'QG_SELFTEST_FAIL')+' pass='+pass+' fail='+fail;
+  lines.unshift(summary);
+  document.getElementById('out').textContent=lines.join('\n');
+  document.getElementById('out').className=fail?'bad':'ok';
+  document.title=fail?'QG_FAIL':'QG_PASS';
+  window.__qg={pass:pass,fail:fail,lines:lines};
+}());
+</script>
+</body></html>

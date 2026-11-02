@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>码桥 · 高速色码（实验）</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="highspeed.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="返回二维码模式">
+        <img src="icon.svg" width="42" height="42" alt="">
+        <span class="brand-text"><strong>码桥</strong><small>QUANTUM GRID</small></span>
+      </a>
+      <div class="topbar-actions">
+        <span class="offline-badge"><span class="dot"></span>完全离线</span>
+        <a class="btn btn-quiet btn-small" href="fountain-send.html">Fountain 高速</a>
+        <a class="btn btn-quiet btn-small" href="./">二维码模式</a>
+      </div>
+    </header>
+
+    <main class="hs-main">
+      <section class="hs-hero">
+        <div>
+          <p class="eyebrow">EXPERIMENTAL <span>·</span> 112 × 112 <span>·</span> RGB 8-COLOR</p>
+          <h1>高速色码，<em>仍然不经过网络。</em></h1>
+          <p class="hero-sub">112×112 单元、8 色 RGB、角锚点、透视校正、伪随机掩码和 RA-LDPC 纠错。目标是在同样的屏幕—摄像头链路上，用比二维码更高的密度搬运数据。</p>
+        </div>
+        <div class="hs-warning">
+          <strong>实验模式</strong>
+          <span>需要发送端和接收端正对屏幕；强光、反光和运动模糊会降低识别率。二维码模式仍作为稳定回退。</span>
+        </div>
+      </section>
+
+      <div class="hs-grid">
+        <section class="hs-card" id="senderCard">
+          <div class="hs-card-head">
+            <span class="hs-step">01</span>
+            <div><h2>发送端</h2><p>文件 → 压缩/加密 → 色码帧</p></div>
+          </div>
+
+          <label class="dropzone" id="dropzone" for="fileInput">
+            <input id="fileInput" type="file">
+            <span class="drop-icon">＋</span>
+            <strong id="fileName">选择文件</strong>
+            <small id="fileHint">支持大文件；不再有 8 MB 上限（受浏览器内存限制）</small>
+          </label>
+
+          <div class="hs-fields">
+            <label class="field">
+              <span>加密口令（可选）</span>
+              <input id="password" type="password" autocomplete="new-password" placeholder="留空则不加密">
+            </label>
+            <label class="field">
+              <span>播放帧率</span>
+              <select id="fps">
+                <option value="4">4 fps · 稳定</option>
+                <option value="6" selected>6 fps · 推荐</option>
+                <option value="8">8 fps · 快速</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="hs-actions">
+            <button class="btn btn-primary" id="startBtn" type="button">开始播放</button>
+            <button class="btn btn-quiet" id="pauseBtn" type="button" disabled>暂停</button>
+            <button class="btn btn-quiet" id="stopBtn" type="button" disabled>停止</button>
+            <button class="btn btn-quiet" id="fullBtn" type="button">全屏</button>
+          </div>
+
+          <div class="hs-stage" id="senderStage">
+            <canvas id="senderCanvas" width="1024" height="1024" aria-label="高速色码画布"></canvas>
+            <div class="hs-stage-empty" id="stageEmpty">选择文件后开始</div>
+          </div>
+
+          <div class="hs-stats" id="senderStats">
+            <div><span>压缩后</span><strong id="statPayload">—</strong></div>
+            <div><span>帧数</span><strong id="statFrames">—</strong></div>
+            <div><span>当前帧</span><strong id="statCurrent">—</strong></div>
+            <div><span>状态</span><strong id="statState">待机</strong></div>
+          </div>
+          <p class="hs-log" id="senderLog">提示：接收端先点“打开摄像头”，再把整个色码放进取景框。</p>
+        </section>
+
+        <section class="hs-card" id="receiverCard">
+          <div class="hs-card-head">
+            <span class="hs-step">02</span>
+            <div><h2>接收端</h2><p>摄像头 → 锚点校正 → 纠错 → 文件</p></div>
+          </div>
+
+          <div class="hs-camera">
+            <video id="video" playsinline muted></video>
+            <canvas id="scanCanvas" width="1280" height="720"></canvas>
+            <div class="hs-camera-empty" id="cameraEmpty">摄像头未打开</div>
+          </div>
+
+          <div class="hs-fields">
+            <label class="field">
+              <span>解密口令</span>
+              <input id="receivePassword" type="password" autocomplete="current-password" placeholder="仅加密文件需要">
+            </label>
+            <label class="field">
+              <span>识别频率</span>
+              <select id="scanRate">
+                <option value="180">5.5 次/秒 · 稳定</option>
+                <option value="140" selected>7 次/秒 · 推荐</option>
+                <option value="100">10 次/秒 · 快速</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="hs-actions">
+            <button class="btn btn-primary" id="cameraBtn" type="button">打开摄像头</button>
+            <button class="btn btn-quiet" id="resetBtn" type="button">清空进度</button>
+          </div>
+
+          <div class="hs-progress">
+            <div class="hs-progress-head"><span id="receiveName">等待发送端</span><strong id="receivePercent">0%</strong></div>
+            <div class="hs-bar"><span id="receiveBar"></span></div>
+          </div>
+
+          <div class="hs-stats" id="receiveStats">
+            <div><span>已收帧</span><strong id="statHave">0</strong></div>
+            <div><span>总帧数</span><strong id="statTotal">—</strong></div>
+            <div><span>文件大小</span><strong id="statSize">—</strong></div>
+            <div><span>状态</span><strong id="statReceive">等待</strong></div>
+          </div>
+          <p class="hs-log" id="receiveLog">打开摄像头，把发送端整个色码放进画面。</p>
+        </section>
+      </div>
+
+      <section class="hs-notes">
+        <h3>这一版实现了什么</h3>
+        <ul>
+          <li><b>CBOR 元数据</b>：文件名、大小、SHA-256、加密参数、分片信息。</li>
+          <li><b>8 色 RGB</b>：112×112 单元，每单元 3 bit；第一行是 8 色校准条。</li>
+          <li><b>4 个角锚点</b>：原始分辨率质心定位 + 单应性透视校正。</li>
+          <li><b>RA-LDPC</b>：码率约 0.625，测试可恢复 20%–25% 单元擦除。</li>
+          <li><b>伪随机掩码</b>：避免大面积同色块，替代固定 QR mask。</li>
+          <li><b>AES-GCM</b>：可选口令加密；PBKDF2-SHA-256 派生密钥。</li>
+          <li><b>无 8 MB 限制</b>：分片号使用 32 位，支持大文件（浏览器内存允许范围内）。</li>
+        </ul>
+      </section>
+
+      <footer class="footer">
+        <span>码桥 Quantum Grid <b>实验版</b></span>
+        <span>数据不离开本机 · 不使用网络 · 无第三方运行库</span>
+      </footer>
+    </main>
+  </div>
+
+  <script src="vendor/fflate.min.js"></script>
+  <script src="cim.js"></script>
+  <script src="highspeed.js"></script>
+</body>
+</html>

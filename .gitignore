@@ -1,0 +1,16 @@
+﻿dist/
+.tools/
+.reference/
+.run/
+.publish/
+__pycache__/
+*.py[cod]
+*.apk
+*.idsig
+*.keystore
+android/app/build/
+android/build/
+android/local.properties
+python-server/web/
+node_modules/
+*.log

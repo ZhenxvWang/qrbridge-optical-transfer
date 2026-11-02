@@ -1,0 +1,17 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=码桥
+Name[zh_CN]=码桥
+Name[en_US]=QR Bridge
+GenericName=离线二维码文件传输
+GenericName[en_US]=Offline QR File Transfer
+Comment=用屏幕二维码和摄像头在两台电脑间传输文件，无需网络
+Comment[en_US]=Transfer files between two computers using QR codes and a camera, fully offline
+Exec=/usr/bin/qrbridge
+TryExec=/usr/bin/qrbridge
+Icon=/usr/share/icons/hicolor/scalable/apps/qrbridge.svg
+Terminal=false
+Categories=Utility;FileTools;
+Keywords=QR;二维码;文件传输;offline;airgap;
+StartupNotify=true
